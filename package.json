@@ -8,6 +8,6 @@
   "dependencies": {
     "express": "^4.19.2",
     "body-parser": "^1.20.2",
-    "canvas": "^2.11.2"
+    "@napi-rs/canvas": "^0.1.52"
   }
 }
