@@ -9,15 +9,20 @@ const app = express();
 const port = process.env.PORT || 3000;
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// ✅ poprawiona wersja frameHTML z absolutnymi linkami
 function frameHTML({ title, imageUrl, postUrl, buttons, state }) {
+  const base = process.env.PUBLIC_BASE_URL || "";
+  const absImage = imageUrl.startsWith("http") ? imageUrl : `${base}${imageUrl}`;
+  const absPost = postUrl.startsWith("http") ? postUrl : `${base}${postUrl}`;
   const s = state ? JSON.stringify(state) : undefined;
+
   return `<!doctype html>
 <html>
 <head>
   <meta property="og:title" content="${title}" />
-  <meta property="og:image" content="${imageUrl}" />
+  <meta property="og:image" content="${absImage}" />
   <meta property="fc:frame" content="vNext" />
-  <meta property="fc:frame:post_url" content="${postUrl}" />
+  <meta property="fc:frame:post_url" content="${absPost}" />
   ${buttons.map((b,i)=>`<meta property="fc:frame:button:${i+1}" content="${b}" />`).join("\n  ")}
   ${s ? `<meta property="fc:frame:state" content='${s}' />` : ""}
 </head>
@@ -39,9 +44,9 @@ function checkWinner(board) {
 }
 
 function drawBoard(board, winner) {
-  const size = 1200;            // 1200x630 to dobry wymiar do podglądu linków
+  const size = 1200;            
   const height = 630;
-  const gridSize = height;      // plansza kwadratowa po lewej
+  const gridSize = height;      
   const cell = gridSize / 3;
   const canvas = createCanvas(size, height);
   const ctx = canvas.getContext("2d");
@@ -54,7 +59,7 @@ function drawBoard(board, winner) {
   for (let y=0; y<3; y++) {
     for (let x=0; x<3; x++) {
       const i = y*3+x;
-      ctx.fillStyle = (x+y)%2===0 ? "#a7c7e7" : "#4a90e2"; // jasny/ciemny
+      ctx.fillStyle = (x+y)%2===0 ? "#a7c7e7" : "#4a90e2";
       ctx.fillRect(x*cell, y*cell, cell, cell);
 
       const v = board[i] || (i+1).toString();
