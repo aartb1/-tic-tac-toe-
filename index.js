@@ -1,173 +1,138 @@
-// Farcaster Frame: Kółko i Krzyżyk z BASED! + "Nowa gra"
-// Działa na Vercel (serverless) dzięki @napi-rs/canvas
-
 const express = require("express");
 const bodyParser = require("body-parser");
 const { createCanvas } = require("@napi-rs/canvas");
 
 const app = express();
-const port = process.env.PORT || 3000;
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
-// ✅ poprawiona wersja frameHTML z absolutnymi linkami
-function frameHTML({ title, imageUrl, postUrl, buttons, state }) {
-  const base = process.env.PUBLIC_BASE_URL || "";
-  const absImage = imageUrl.startsWith("http") ? imageUrl : `${base}${imageUrl}`;
-  const absPost = postUrl.startsWith("http") ? postUrl : `${base}${postUrl}`;
-  const s = state ? JSON.stringify(state) : undefined;
+// Prosta plansza do kółko i krzyżyk
+let board = Array(9).fill(null);
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta property="og:title" content="${title}" />
-  <meta property="og:image" content="${absImage}" />
-  <meta property="fc:frame" content="vNext" />
-  <meta property="fc:frame:post_url" content="${absPost}" />
-  ${buttons.map((b,i)=>`<meta property="fc:frame:button:${i+1}" content="${b}" />`).join("\n  ")}
-  ${s ? `<meta property="fc:frame:state" content='${s}' />` : ""}
-</head>
-<body><h1>${title}</h1></body>
-</html>`;
-}
-
-function checkWinner(board) {
-  const wins = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-  for (const [a,b,c] of wins) {
-    if (board[a] && board[a]===board[b] && board[a]===board[c]) return board[a];
-  }
-  if (board.every(c=>c!=="")) return "remis";
-  return null;
-}
-
-function drawBoard(board, winner) {
-  const size = 1200;            
-  const height = 630;
-  const gridSize = height;      
-  const cell = gridSize / 3;
-  const canvas = createCanvas(size, height);
+// Funkcja rysująca planszę
+function drawBoard(message = "") {
+  const size = 400;
+  const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
-  // tło
-  ctx.fillStyle = "#0d1b2a";
-  ctx.fillRect(0, 0, size, height);
+  // Tło
+  ctx.fillStyle = "#cce6ff"; // jasny niebieski
+  ctx.fillRect(0, 0, size, size);
 
-  // plansza 3x3 w odcieniach niebieskiego
-  for (let y=0; y<3; y++) {
-    for (let x=0; x<3; x++) {
-      const i = y*3+x;
-      ctx.fillStyle = (x+y)%2===0 ? "#a7c7e7" : "#4a90e2";
-      ctx.fillRect(x*cell, y*cell, cell, cell);
+  // Linie
+  ctx.strokeStyle = "#003366"; // ciemny niebieski
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(size / 3, 0);
+  ctx.lineTo(size / 3, size);
+  ctx.moveTo((size / 3) * 2, 0);
+  ctx.lineTo((size / 3) * 2, size);
+  ctx.moveTo(0, size / 3);
+  ctx.lineTo(size, size / 3);
+  ctx.moveTo(0, (size / 3) * 2);
+  ctx.lineTo(size, (size / 3) * 2);
+  ctx.stroke();
 
-      const v = board[i] || (i+1).toString();
-      ctx.fillStyle = "#001220";
-      ctx.font = "bold 120px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(v==="X"?"❌":v==="O"?"⭕":v, x*cell+cell/2, y*cell+cell/2);
+  // Pola
+  ctx.font = "bold 80px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  board.forEach((val, i) => {
+    if (val) {
+      const x = (i % 3) * (size / 3) + size / 6;
+      const y = Math.floor(i / 3) * (size / 3) + size / 6;
+      ctx.fillStyle = val === "X" ? "#001f4d" : "#3399ff";
+      ctx.fillText(val, x, y);
     }
-  }
+  });
 
-  // podpis po prawej
-  ctx.fillStyle = "#e0f0ff";
-  ctx.font = "bold 64px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("Kółko i Krzyżyk", gridSize + 40, 40);
-
-  // overlay po zakończeniu
-  if (winner) {
-    ctx.fillStyle = "rgba(0,0,40,0.7)";
-    ctx.fillRect(0, 0, gridSize, gridSize);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = "900 120px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillText("BASED!", gridSize/2, gridSize/2 - 80);
-
-    ctx.font = "bold 72px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillText(winner==="remis" ? "REMIS" : `Wygrał ${winner}`, gridSize/2, gridSize/2 + 40);
+  // Komunikat np. "BASED!"
+  if (message) {
+    ctx.fillStyle = "#ff0000";
+    ctx.font = "bold 40px Arial";
+    ctx.fillText(message, size / 2, size - 30);
   }
 
   return canvas.toBuffer("image/png");
 }
 
-// PNG z aktualnym stanem
-app.get("/ttt/image",(req,res)=>{
-  let board=[];
-  try { board=JSON.parse(String(req.query.board||"[]")); } catch {}
-  const winner = req.query.winner ? String(req.query.winner) : null;
-  const img = drawBoard(board, winner);
-  res.set("Content-Type","image/png").send(img);
-});
+// Funkcja sprawdzania zwycięzcy
+function checkWinner() {
+  const wins = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // poziome
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // pionowe
+    [0, 4, 8], [2, 4, 6]             // przekątne
+  ];
 
-// Wejście do Frame'a
-app.get("/ttt", (_req,res)=>{
-  const base = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
-  const board = Array(9).fill("");
-  const state = { board, turn:"X" };
-  const html = frameHTML({
-    title:"Kółko i Krzyżyk",
-    imageUrl:`${base}/ttt/image?board=${encodeURIComponent(JSON.stringify(board))}`,
-    postUrl:`${base}/ttt/action`,
-    buttons:["1","2","3","4","5","6","7","8","9","Nowa gra"],
-    state
-  });
-  res.type("text/html").send(html);
-});
-
-// Ruchy / reset
-app.post("/ttt/action",(req,res)=>{
-  const raw = req.body || {};
-  let untrusted={};
-  try {
-    if(typeof raw.untrustedData==="string") untrusted=JSON.parse(raw.untrustedData);
-    else if(raw.untrustedData) untrusted=raw.untrustedData;
-    else untrusted=raw;
-  } catch { untrusted=raw; }
-
-  let state={board:Array(9).fill(""),turn:"X"};
-  try { if(untrusted.state) state=JSON.parse(untrusted.state);} catch {}
-
-  const base=process.env.PUBLIC_BASE_URL||`http://localhost:${port}`;
-  const btn = Number(untrusted.buttonIndex||1);
-
-  // 10-ty przycisk = "Nowa gra"
-  if (btn === 10) {
-    state={board:Array(9).fill(""),turn:"X"};
-  } else {
-    let winner = checkWinner(state.board);
-    if (!winner) {
-      const move = btn-1;
-      if(state.board[move]===""){
-        state.board[move]=state.turn;
-        state.turn=state.turn==="X"?"O":"X";
-      }
-      winner = checkWinner(state.board);
-      const html=frameHTML({
-        title:"Kółko i Krzyżyk",
-        imageUrl:`${base}/ttt/image?board=${encodeURIComponent(JSON.stringify(state.board))}&winner=${winner||""}`,
-        postUrl:`${base}/ttt/action`,
-        buttons: winner ? ["Nowa gra"] : ["1","2","3","4","5","6","7","8","9","Nowa gra"],
-        state
-      });
-      return res.type("text/html").send(html);
+  for (const [a, b, c] of wins) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
     }
   }
 
-  // odświeżona plansza (po ruchu lub resecie)
-  const html=frameHTML({
-    title:"Kółko i Krzyżyk",
-    imageUrl:`${base}/ttt/image?board=${encodeURIComponent(JSON.stringify(state.board))}`,
-    postUrl:`${base}/ttt/action`,
-    buttons:["1","2","3","4","5","6","7","8","9","Nowa gra"],
-    state
-  });
-  res.type("text/html").send(html);
+  return null;
+}
+
+// Endpoint: obrazek planszy
+app.get("/api/image", (req, res) => {
+  const winner = checkWinner();
+  const message = winner ? "BASED!" : "";
+  res.setHeader("Content-Type", "image/png");
+  res.send(drawBoard(message));
 });
 
-app.listen(port,()=>console.log(`TicTacToe Frame running on :${port}`));
+// Endpoint: ruch lub nowa gra
+app.post("/api/move", (req, res) => {
+  const { buttonIndex } = req.body.untrustedData;
+
+  if (buttonIndex >= 1 && buttonIndex <= 9) {
+    const idx = buttonIndex - 1;
+    if (!board[idx]) {
+      board[idx] = "X"; // na start tylko X
+    }
+  }
+  if (buttonIndex === 10) {
+    board = Array(9).fill(null); // nowa gra
+  }
+
+  res.setHeader("Content-Type", "text/html");
+  res.send(renderFrame());
+});
+
+// Endpoint: strona główna /ttt
+app.get("/ttt", (req, res) => {
+  res.setHeader("Content-Type", "text/html");
+  res.send(renderFrame());
+});
+
+// HTML Frame
+function renderFrame() {
+  return `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <title>Kółko i Krzyżyk</title>
+      <meta property="og:title" content="Kółko i Krzyżyk">
+      <meta property="og:image" content="https://tic-tac-toe-j6il.vercel.app/api/image">
+      <meta property="fc:frame" content="vNext">
+      <meta property="fc:frame:image" content="https://tic-tac-toe-j6il.vercel.app/api/image">
+      <meta property="fc:frame:post_url" content="https://tic-tac-toe-j6il.vercel.app/api/move">
+      <meta property="fc:frame:button:1" content="Pole 1">
+      <meta property="fc:frame:button:2" content="Pole 2">
+      <meta property="fc:frame:button:3" content="Pole 3">
+      <meta property="fc:frame:button:4" content="Pole 4">
+      <meta property="fc:frame:button:5" content="Pole 5">
+      <meta property="fc:frame:button:6" content="Pole 6">
+      <meta property="fc:frame:button:7" content="Pole 7">
+      <meta property="fc:frame:button:8" content="Pole 8">
+      <meta property="fc:frame:button:9" content="Pole 9">
+      <meta property="fc:frame:button:10" content="Nowa gra">
+    </head>
+    <body>
+      <h1>Kółko i Krzyżyk</h1>
+    </body>
+  </html>
+  `;
+}
+
+module.exports = app;
