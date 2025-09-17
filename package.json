@@ -1,6 +1,7 @@
 {
-  "name": "tic-tac-toe-frame",
+  "name": "tic-tac-toe",
   "version": "1.0.0",
+  "description": "Kółko i Krzyżyk - Frame na Farcaster",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
